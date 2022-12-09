@@ -1,0 +1,48 @@
+#!/bin/sh
+
+if [ ! -f wp-config.php ]
+then
+        echo "This is not a WP instance (no wp-config.php file found)."
+        exit 1
+fi
+
+version="$(php -r 'require("wp-includes/version.php"); print $wp_version;')"
+if echo $version | grep -vEq "[0-9\.]+"
+then
+        echo "This is not a WP instance (could not determine version)."
+        exit 1
+fi
+
+date=$(date +%s)
+
+echo "Found WordPress instance. Version is $version."
+
+mkdir old$date
+ls -a | grep -v "^\.*$" | grep -v "^old$date$" | xargs mv -t old$date
+
+echo "Downloading copy of WordPress..."
+
+wget -q -O - https://github.com/WordPress/WordPress/archive/$version.tar.gz | tar -xz --strip-components=1 --exclude=wp-content/plugins --exclude=wp-content/themes WordPress-$version/*
+
+echo "Merging configuration and content..."
+
+mv old$date/wp-content/plugins wp-content
+mv old$date/wp-content/themes wp-content
+mv old$date/wp-content/uploads wp-content
+
+cp old$date/wp-config.php .
+
+echo "Creating default .htaccess file..."
+
+echo "# BEGIN WordPress" >> .htaccess
+echo "" >> .htaccess
+echo "RewriteEngine On" >> .htaccess
+echo "RewriteBase /" >> .htaccess
+echo "RewriteRule ^index\.php$ - [L]" >> .htaccess
+echo "RewriteCond %{REQUEST_FILENAME} !-f" >> .htaccess
+echo "RewriteCond %{REQUEST_FILENAME} !-d" >> .htaccess
+echo "RewriteRule . /index.php [L]" >> .htaccess
+echo "" >> .htaccess
+echo "# END WordPress" >> .htaccess
+
+echo "Old files placed in directory old$date."
